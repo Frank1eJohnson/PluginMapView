@@ -1,0 +1,31 @@
+{
+	"FileVersion" : 3,
+	"Version" : 1,
+	"VersionName" : "1.0",
+	"FriendlyName" : "Street Map",
+	"Description" : "Import and render OpenPluginMapView data",
+	"Category" : "Importers",
+	"CreatedBy" : "Zhongqi Shan",
+	"CreatedByURL" : "http://twitter.com/mike_fricker",
+	"DocsURL" : "http://github.com/sabrave/PluginMapView",
+	"MarketplaceURL" : "",
+	"SupportURL" : "",
+	"EnabledByDefault" : true,
+	"CanContainContent" : false,
+	"IsBetaVersion" : false,
+	"Installed" : false,
+	"Modules" :
+	[
+		{
+			"Name" : "PluginMapViewRuntime",
+			"Type" : "Runtime",
+			"LoadingPhase" : "Default"
+		},
+	
+		{
+			"Name" : "PluginMapViewImporting",
+			"Type" : "Editor",
+			"LoadingPhase" : "Default"
+		}
+  ]
+}
