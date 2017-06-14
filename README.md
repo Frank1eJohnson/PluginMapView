@@ -1,6 +1,6 @@
 # Map View for Street in UE4
 
-This plugin allows you to import **OpenPluginMapView** XML data your **Unreal Engine 4** project as a new PluginMapView asset type.  You can use the example **Street Map Component** to render streets and buildings.
+This plugin allows you to import **OpenPluginMapView** XML data into your **Unreal Engine 4** project as a new PluginMapView asset type.  You can use the example **Street Map Component** to render streets and buildings.
 
 ![UE4OSMBrooklyn](Docs/UE4OSMBrooklyn.png)
 
