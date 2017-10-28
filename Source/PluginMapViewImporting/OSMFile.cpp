@@ -60,7 +60,7 @@ bool FOSMFile::LoadOpenPluginMapViewFile( FString& OSMFilePath, const bool bIsFi
 	{
 		FeedbackContext->Logf(
 			ELogVerbosity::Error,
-			TEXT( "Failed to load OpenPluginMapView XML file (""%s"", Line %i)" ),
+			TEXT( "Failed to load OpenPluginMapView XML file ('%s', Line %i)" ),
 			*ErrorMessage.ToString(),
 			ErrorLineNumber );
 	}
