@@ -34,7 +34,7 @@ If you're new to plugins in UE4, you can find lots of information [right here](h
 
 ## Getting OpenPluginMapView Data
 
-**Legal:**  OpenPluginMapView data is licensed under the [ODC Open Database License (ODbL)](http://opendatacommons.org/licenses/odbl/).  If you use this data in your project, *make sure you understand and comply with the terms of that license* e.g. lookup the [Legal FAQ](https://wiki.openpluginmapview.org/wiki/Legal_FAQ).
+**Important:**  OpenPluginMapView data is licensed under the [ODC Open Database License (ODbL)](http://opendatacommons.org/licenses/odbl/).  If you use this data in your project, *make sure you understand and comply with the terms of that license*.
 
 ![UE4OSMExport](Docs/UE4OSMExport.png)
 
@@ -56,15 +56,6 @@ If you receive an error message after clicking **Export**, OpenPluginMapView may
 
 Of course, there are many other places you can find raw OpenPluginMapView XML data on the web also, but keep in mind the plugin has only been tested with files exported directly from OpenPluginMapView so far.
 
-## Editing OpenPluginMapView
-
-**Attention:** OSM covers the real world and includes only fact based knowledge. If you like to build up an fictional map, you can use the [JOSM offline editor](https://wiki.openpluginmapview.org/wiki/JOSM), to create an local XML file, which you don't upload(!) to the project.
-
-You can easily contribute back to OSM, for example to improve your hometown. Just signup at www.openpluginmapview.org and click at the edit tab. The online iD editor allows you to trace aerial imagery and to add POIs easily. To learn more details, just look over here:
-* http://learnosm.org
-* https://wiki.openpluginmapview.org/wiki/Video_tutorials
-
-Please be aware, that the project community (the inhabitants!) is the essential part. Thus it's wise to [get in touch](https://wiki.openpluginmapview.org/wiki/Contact_channels) with mappers close to you, to get more tips on local tagging, or unwritten rules. Happy mapping!
 
 ## Plugin Details
 
