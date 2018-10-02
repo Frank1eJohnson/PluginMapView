@@ -63,4 +63,5 @@ void FPluginMapViewAssetTypeActions::GetResolvedSourceFilePaths(const TArray<UOb
 	}
 }
 
+
 #undef LOCTEXT_NAMESPACE

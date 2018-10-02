@@ -71,12 +71,9 @@ void FPluginMapViewVertexFactory::InitVertexFactory( const FPluginMapViewVertexB
 }
 
 
-FPluginMapViewSceneProxy::FPluginMapViewSceneProxy(const UPluginMapViewComponent* InComponent)
-	: FPrimitiveSceneProxy(InComponent),
-	PluginMapViewComp(InComponent),
-	CollisionResponse(InComponent->GetCollisionResponseToChannels())
+FPluginMapViewSceneProxy::FPluginMapViewSceneProxy( const UPluginMapViewComponent* InComponent )
+	: FPrimitiveSceneProxy( InComponent )
 {
-
 }
 
 
@@ -109,6 +106,7 @@ void FPluginMapViewSceneProxy::Init( const UPluginMapViewComponent* InComponent,
 	
 	InitAfterIndexBuffer( InComponent, Vertices );
 }
+
 
 void FPluginMapViewSceneProxy::InitAfterIndexBuffer( const UPluginMapViewComponent* PluginMapViewComponent, const TArray< FPluginMapViewVertex >& Vertices )
 {
@@ -161,11 +159,6 @@ bool FPluginMapViewSceneProxy::MustDrawMeshDynamically( const FSceneView& View )
 }
 
 
-bool FPluginMapViewSceneProxy::IsInCollisionView(const FEngineShowFlags& EngineShowFlags) const
-{
-	return  EngineShowFlags.CollisionVisibility || EngineShowFlags.CollisionPawn;
-}
-
 FPrimitiveViewRelevance FPluginMapViewSceneProxy::GetViewRelevance( const FSceneView* View ) const
 {
 	FPrimitiveViewRelevance Result;
@@ -189,7 +182,7 @@ bool FPluginMapViewSceneProxy::CanBeOccluded() const
 }
 
 
-void FPluginMapViewSceneProxy::MakeMeshBatch( FMeshBatch& Mesh, FMaterialRenderProxy* WireframeMaterialRenderProxyOrNull, bool bDrawCollision) const
+void FPluginMapViewSceneProxy::MakeMeshBatch( FMeshBatch& Mesh, FMaterialRenderProxy* WireframeMaterialRenderProxyOrNull ) const
 {
 	FMaterialRenderProxy* MaterialProxy = NULL;
 	if( WireframeMaterialRenderProxyOrNull != nullptr )
@@ -198,14 +191,7 @@ void FPluginMapViewSceneProxy::MakeMeshBatch( FMeshBatch& Mesh, FMaterialRenderP
 	}
 	else
 	{
-		if (bDrawCollision)
-		{
-			MaterialProxy = new FColoredMaterialRenderProxy(GEngine->ShadedLevelColorationUnlitMaterial->GetRenderProxy(IsSelected(), IsHovered()), FColor::Cyan);
-		}
-		else if (MaterialProxy == nullptr)
-		{
-			MaterialProxy = PluginMapViewComp->GetDefaultMaterial()->GetRenderProxy(IsSelected());
-		}
+		MaterialProxy = MaterialInterface->GetRenderProxy(IsSelected());
 	}
 	
 	FMeshBatchElement& BatchElement = Mesh.Elements[0];
@@ -234,40 +220,36 @@ void FPluginMapViewSceneProxy::DrawStaticElements( FStaticPrimitiveDrawInterface
 		const float ScreenSize = 1.0f;
 
 		FMeshBatch MeshBatch;
-		MakeMeshBatch( MeshBatch, nullptr);
+		MakeMeshBatch( MeshBatch, nullptr );
 		PDI->DrawMesh( MeshBatch, ScreenSize );
 	}
 }
 
 
-void FPluginMapViewSceneProxy::GetDynamicMeshElements(const TArray<const FSceneView*>& Views, const FSceneViewFamily& ViewFamily, uint32 VisibilityMap, class FMeshElementCollector& Collector) const
+void FPluginMapViewSceneProxy::GetDynamicMeshElements( const TArray<const FSceneView*>& Views, const FSceneViewFamily& ViewFamily, uint32 VisibilityMap, class FMeshElementCollector& Collector ) const
 {
-	const int IndexCount = FMath::Max(IndexBuffer.Indices16.Num(), IndexBuffer.Indices32.Num());
-	if (VertexBuffer.Vertices.Num() > 0 && IndexCount > 0)
+	const int IndexCount = FMath::Max( IndexBuffer.Indices16.Num(), IndexBuffer.Indices32.Num() );
+	if( VertexBuffer.Vertices.Num() > 0 && IndexCount > 0 )
 	{
-		for (int32 ViewIndex = 0; ViewIndex < Views.Num(); ++ViewIndex)
+		for( int32 ViewIndex = 0; ViewIndex < Views.Num(); ++ViewIndex )
 		{
-			const FSceneView& View = *Views[ViewIndex];
+			const FSceneView& View = *Views[ ViewIndex ];
 
 			const bool bIsWireframe = AllowDebugViewmodes() && View.Family->EngineShowFlags.Wireframe;
 
-			FColoredMaterialRenderProxy* WireframeMaterialRenderProxy = GEngine->WireframeMaterial && bIsWireframe ? new FColoredMaterialRenderProxy(GEngine->WireframeMaterial->GetRenderProxy(IsSelected()), FLinearColor(0, 0.5f, 1.f)) : NULL;
-
-
-			if (MustDrawMeshDynamically(View))
+			FColoredMaterialRenderProxy WireframeMaterialInstance( GEngine->WireframeMaterial ? GEngine->WireframeMaterial->GetRenderProxy( IsSelected() ) : NULL, FLinearColor( 0, 0.5f, 1.f ) );
+			FMaterialRenderProxy* WireframeMaterialRenderProxy = NULL;
+			if( bIsWireframe )
 			{
-				const bool bInCollisionView = IsInCollisionView(ViewFamily.EngineShowFlags);
-				const bool bCanDrawCollision = bInCollisionView && IsCollisionEnabled();
+				WireframeMaterialRenderProxy = &WireframeMaterialInstance;
+			}
 
-				if (!IsCollisionEnabled() && bInCollisionView)
-				{
-					continue;
-				}
-
+			if( MustDrawMeshDynamically( View ) )
+			{
 				// Draw the mesh!
 				FMeshBatch& MeshBatch = Collector.AllocateMesh();
-				MakeMeshBatch(MeshBatch, WireframeMaterialRenderProxy, bCanDrawCollision);
-				Collector.AddMesh(ViewIndex, MeshBatch);
+				MakeMeshBatch( MeshBatch, WireframeMaterialRenderProxy );
+				Collector.AddMesh( ViewIndex, MeshBatch );
 			}
 		}
 	}
