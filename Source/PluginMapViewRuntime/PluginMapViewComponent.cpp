@@ -2,18 +2,28 @@
 
 #include "PluginMapViewRuntime.h"
 #include "PluginMapViewComponent.h"
-#include "PluginMapView.h"
 #include "PluginMapViewSceneProxy.h"
 #include "Runtime/Engine/Classes/Engine/StaticMesh.h"
 #include "Runtime/Engine/Public/StaticMeshResources.h"
 #include "PolygonTools.h"
 
+#include "PhysicsEngine/BodySetup.h"
 
-UPluginMapViewComponent::UPluginMapViewComponent( const FObjectInitializer& ObjectInitializer )
-	: Super( ObjectInitializer ),
-	  CachedLocalBounds( FBox( 0 ) )
+#if WITH_EDITOR
+#include "ModuleManager.h"
+#include "PropertyEditorModule.h"
+#endif //WITH_EDITOR
+
+
+
+UPluginMapViewComponent::UPluginMapViewComponent(const FObjectInitializer& ObjectInitializer)
+	: Super(ObjectInitializer),
+	CachedLocalBounds(FBox(0)),
+	PluginMapView(nullptr)
 {
-	SetCollisionProfileName( UCollisionProfile::NoCollision_ProfileName );
+	// We make sure our mesh collision profile name is set to NoCollisionProfileName at initialization. 
+	// Because we don't have collision data yet!
+	SetCollisionProfileName(UCollisionProfile::NoCollision_ProfileName);
 
 	// We don't currently need to be ticked.  This can be overridden in a derived class though.
 	PrimaryComponentTick.bCanEverTick = false;
@@ -29,15 +39,17 @@ UPluginMapViewComponent::UPluginMapViewComponent( const FObjectInitializer& Obje
 	// Our mesh is too complicated to be a useful occluder.
 	bUseAsOccluder = false;
 
-	// We have no nav mesh support yet.
-	bCanEverAffectNavigation = false;
+	// Our mesh can influence navigation.
+	bCanEverAffectNavigation = true;
+
+	static ConstructorHelpers::FObjectFinder<UMaterialInterface> DefaultMaterialAsset(TEXT("/PluginMapView/PluginMapViewDefaultMaterial"));
+	PluginMapViewDefaultMaterial = DefaultMaterialAsset.Object;
+
 }
 
 
 FPrimitiveSceneProxy* UPluginMapViewComponent::CreateSceneProxy()
 {
-	BuildMeshIfNeeded();
-	
 	FPluginMapViewSceneProxy* PluginMapViewSceneProxy = nullptr;
 
 	if( HasValidMesh() )
@@ -55,39 +67,170 @@ int32 UPluginMapViewComponent::GetNumMaterials() const
 	// NOTE: This is a bit of a weird thing about Unreal that we need to deal with when defining a component that
 	// can have materials assigned.  UPrimitiveComponent::GetNumMaterials() will return 0, so we need to override it 
 	// to return the number of overridden materials, which are the actual materials assigned to the component.
-	return GetNumOverrideMaterials();
+	return HasValidMesh() ? GetNumMeshSections() : GetNumOverrideMaterials();
 }
 
 
-void UPluginMapViewComponent::SetPluginMapView( class UPluginMapView* NewPluginMapView )
+void UPluginMapViewComponent::SetPluginMapView(class UPluginMapView* NewPluginMapView, bool bClearPreviousMeshIfAny /*= false*/, bool bRebuildMesh /*= false */)
 {
-	if( PluginMapView != NewPluginMapView )
+	if (PluginMapView != NewPluginMapView)
 	{
 		PluginMapView = NewPluginMapView;
 
-		InvalidateMesh();
+		if (bClearPreviousMeshIfAny)
+			InvalidateMesh();
+
+		if (bRebuildMesh)
+			BuildMesh();
 	}
 }
 
+
+bool UPluginMapViewComponent::GetPhysicsTriMeshData(struct FTriMeshCollisionData* CollisionData, bool InUseAllTriData)
+{
+
+	if (!CollisionSettings.bGenerateCollision || !HasValidMesh())
+	{
+		return false;
+	}
+
+	// Copy vertices data
+	const int32 NumVertices = Vertices.Num();
+	CollisionData->Vertices.Empty();
+	CollisionData->Vertices.AddUninitialized(NumVertices);
+
+	for (int32 VertexIndex = 0; VertexIndex < NumVertices; VertexIndex++)
+	{
+		CollisionData->Vertices[VertexIndex] = Vertices[VertexIndex].Position;
+	}
+
+	// Copy indices data
+	const int32 NumTriangles = Indices.Num() / 3;
+	FTriIndices TempTriangle;
+	for (int32 TriangleIndex = 0; TriangleIndex < NumTriangles * 3; TriangleIndex += 3)
+	{
+
+		TempTriangle.v0 = Indices[TriangleIndex + 0];
+		TempTriangle.v1 = Indices[TriangleIndex + 1];
+		TempTriangle.v2 = Indices[TriangleIndex + 2];
+
+
+		CollisionData->Indices.Add(TempTriangle);
+		CollisionData->MaterialIndices.Add(0);
+	}
+
+	CollisionData->bFlipNormals = true;
+	CollisionData->bDeformableMesh = true;
+
+	return HasValidMesh();
+}
+
+
+bool UPluginMapViewComponent::ContainsPhysicsTriMeshData(bool InUseAllTriData) const
+{
+	return HasValidMesh() && CollisionSettings.bGenerateCollision;
+}
+
+
+bool UPluginMapViewComponent::WantsNegXTriMesh()
+{
+	return false;
+}
+
+
+void UPluginMapViewComponent::CreateBodySetupIfNeeded(bool bForceCreation /*= false*/)
+{
+	if (PluginMapViewBodySetup == nullptr || bForceCreation == true)
+	{
+		// Creating new BodySetup Object.
+		PluginMapViewBodySetup = NewObject<UBodySetup>(this);
+		PluginMapViewBodySetup->BodySetupGuid = FGuid::NewGuid();
+		PluginMapViewBodySetup->bDoubleSidedGeometry = CollisionSettings.bAllowDoubleSidedGeometry;
+
+		// shapes per poly shape for collision (Not working in simulation mode).
+		PluginMapViewBodySetup->CollisionTraceFlag = CTF_UseComplexAsSimple;
+	}
+}
+
+
+void UPluginMapViewComponent::GenerateCollision()
+{
+	if (!CollisionSettings.bGenerateCollision || !HasValidMesh())
+	{
+		return;
+	}
+
+	// create a new body setup
+	CreateBodySetupIfNeeded(true);
+
+
+	if (GetCollisionProfileName() == UCollisionProfile::NoCollision_ProfileName)
+	{
+		SetCollisionProfileName(UCollisionProfile::BlockAll_ProfileName);
+	}
+
+	// Rebuild the body setup
+#if WITH_EDITOR || WITH_RUNTIME_PHYSICS_COOKING
+	PluginMapViewBodySetup->InvalidatePhysicsData();
+#endif
+	PluginMapViewBodySetup->CreatePhysicsMeshes();
+
+	UpdateNavigationIfNeeded();
+}
+
+
+void UPluginMapViewComponent::ClearCollision()
+{
+
+	if (PluginMapViewBodySetup != nullptr)
+	{
+#if WITH_RUNTIME_PHYSICS_COOKING || WITH_EDITOR
+		PluginMapViewBodySetup->InvalidatePhysicsData();
+#endif
+		PluginMapViewBodySetup = nullptr;
+	}
+
+	if (GetCollisionProfileName() != UCollisionProfile::NoCollision_ProfileName)
+	{
+		SetCollisionProfileName(UCollisionProfile::NoCollision_ProfileName);
+	}
+
+	UpdateNavigationIfNeeded();
+}
+
+class UBodySetup* UPluginMapViewComponent::GetBodySetup()
+{
+	if (CollisionSettings.bGenerateCollision == true)
+	{
+		// checking if we have a valid body setup. 
+		// A new one is created only if a valid body setup is not found.
+		CreateBodySetupIfNeeded();
+		return PluginMapViewBodySetup;
+	}
+
+	if (PluginMapViewBodySetup != nullptr) PluginMapViewBodySetup = nullptr;
+
+	return nullptr;
+}
 
 void UPluginMapViewComponent::GenerateMesh()
 {
 	/////////////////////////////////////////////////////////
 	// Visual tweakables for generated Street Map mesh
 	//
-	const float RoadZ = 0.0f;
-	const bool bWant3DBuildings = true;
-	const bool bWantLitBuildings = true;
+	const float RoadZ = MeshBuildSettings.RoadOffesetZ;
+	const bool bWant3DBuildings = MeshBuildSettings.bWant3DBuildings;
+	const bool bWantLitBuildings = MeshBuildSettings.bWantLitBuildings;
 	const bool bWantBuildingBorderOnGround = !bWant3DBuildings;
-	const float StreetThickness = 800.0f;
-	const FColor StreetColor = FLinearColor( 0.05f, 0.75f, 0.05f ).ToFColor( false );
-	const float MajorRoadThickness = 1000.0f;
-	const FColor MajorRoadColor = FLinearColor( 0.15f, 0.85f, 0.15f ).ToFColor( false );
-	const float HighwayThickness = 1400.0f;
-	const FColor HighwayColor = FLinearColor( 0.25f, 0.95f, 0.25f ).ToFColor( false );
-	const float BuildingBorderThickness = 20.0f;
-	FLinearColor BuildingBorderLinearColor( 0.85f, 0.85f, 0.85f );
-	const float BuildingBorderZ = 10.0f;
+	const float StreetThickness = MeshBuildSettings.StreetThickness;
+	const FColor StreetColor = MeshBuildSettings.StreetColor.ToFColor( false );
+	const float MajorRoadThickness = MeshBuildSettings.MajorRoadThickness;
+	const FColor MajorRoadColor = MeshBuildSettings.MajorRoadColor.ToFColor( false );
+	const float HighwayThickness = MeshBuildSettings.HighwayThickness;
+	const FColor HighwayColor = MeshBuildSettings.HighwayColor.ToFColor( false );
+	const float BuildingBorderThickness = MeshBuildSettings.BuildingBorderThickness;
+	FLinearColor BuildingBorderLinearColor = MeshBuildSettings.BuildingBorderLinearColor;
+	const float BuildingBorderZ = MeshBuildSettings.BuildingBorderZ;
 	const FColor BuildingBorderColor( BuildingBorderLinearColor.ToFColor( false ) );
 	const FColor BuildingFillColor( FLinearColor( BuildingBorderLinearColor * 0.33f ).CopyWithNewOpacity( 1.0f ).ToFColor( false ) );
 	/////////////////////////////////////////////////////////
@@ -284,50 +427,102 @@ void UPluginMapViewComponent::GenerateMesh()
 
 
 #if WITH_EDITOR
-void UPluginMapViewComponent::PostEditChangeProperty( FPropertyChangedEvent& PropertyChangedEvent )
+void UPluginMapViewComponent::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent)
 {
-	bool bNeedNewData = false;
+	bool bNeedRefreshCustomizationModule = false;
 
-	// Check to see if the "PluginMapView" property changed.  If so, we'll need to rebuild our mesh.
-	if( PropertyChangedEvent.Property != nullptr )
+	// Check to see if the "PluginMapView" property changed.
+	if (PropertyChangedEvent.Property != nullptr)
 	{
-		const FName PropertyName( PropertyChangedEvent.Property->GetFName() );
-		if( PropertyName == GET_MEMBER_NAME_CHECKED( UPluginMapViewComponent, PluginMapView ) )
+		const FName PropertyName(PropertyChangedEvent.Property->GetFName());
+		if (PropertyName == GET_MEMBER_NAME_CHECKED(UPluginMapViewComponent, PluginMapView))
 		{
-			bNeedNewData = true;
+			bNeedRefreshCustomizationModule = true;
+		}
+		else if (IsCollisionProperty(PropertyName)) // For some unknown reason , GET_MEMBER_NAME_CHECKED(UPluginMapViewComponent, CollisionSettings) is not working ??? "TO CHECK LATER"
+		{
+			if (CollisionSettings.bGenerateCollision == true)
+			{
+				GenerateCollision();
+			}
+			else
+			{
+				ClearCollision();
+			}
+			bNeedRefreshCustomizationModule = true;
 		}
 	}
 
-	if( bNeedNewData )
+	if (bNeedRefreshCustomizationModule)
 	{
-		InvalidateMesh();
+		FPropertyEditorModule& PropertyModule = FModuleManager::GetModuleChecked<FPropertyEditorModule>("PropertyEditor");
+		PropertyModule.NotifyCustomizationModuleChanged();
 	}
 
 	// Call the parent implementation of this function
-	Super::PostEditChangeProperty( PropertyChangedEvent );
+	Super::PostEditChangeProperty(PropertyChangedEvent);
 }
 #endif	// WITH_EDITOR
 
 
-void UPluginMapViewComponent::BuildMeshIfNeeded()
+void UPluginMapViewComponent::BuildMesh()
 {
-	const bool bNeedNewMesh = !HasValidMesh();
-	if( bNeedNewMesh )
-	{
-		GenerateMesh();
+	// Wipes out our cached mesh data. Maybe unnecessary in case GenerateMesh is clearing cached mesh data and creating a new SceneProxy  !
+	InvalidateMesh();
 
-		if( HasValidMesh() )
-		{
-			// We have a new bounding box
-			UpdateBounds();
-		}
-		else
-		{
-			// No mesh was generated
-		}
+	GenerateMesh();
+
+	if (HasValidMesh())
+	{
+		// We have a new bounding box
+		UpdateBounds();
+	}
+	else
+	{
+		// No mesh was generated
+	}
+
+	GenerateCollision();
+
+	// Mark our render state dirty so that CreateSceneProxy can refresh it on demand
+	MarkRenderStateDirty();
+
+	AssignDefaultMaterialIfNeeded();
+
+	Modify();
+}
+
+
+void UPluginMapViewComponent::AssignDefaultMaterialIfNeeded()
+{
+	if (this->GetNumMaterials() == 0 || this->GetMaterial(0) == nullptr)
+	{
+		if (!HasValidMesh() || GetDefaultMaterial() == nullptr)
+			return;
+
+		this->SetMaterial(0, GetDefaultMaterial());
 	}
 }
 
+
+void UPluginMapViewComponent::UpdateNavigationIfNeeded()
+{
+	if (bCanEverAffectNavigation || bNavigationRelevant)
+	{
+		UNavigationSystem::UpdateComponentInNavOctree(*this);
+	}
+}
+
+void UPluginMapViewComponent::InvalidateMesh()
+{
+	Vertices.Reset();
+	Indices.Reset();
+	CachedLocalBounds = FBoxSphereBounds(FBox(0));
+	ClearCollision();
+	// Mark our render state dirty so that CreateSceneProxy can refresh it on demand
+	MarkRenderStateDirty();
+	Modify();
+}
 
 FBoxSphereBounds UPluginMapViewComponent::CalcBounds( const FTransform& LocalToWorld ) const
 {
@@ -421,15 +616,8 @@ void UPluginMapViewComponent::AddTriangles( const TArray<FVector>& Points, const
 };
 
 
-void UPluginMapViewComponent::InvalidateMesh()
+FString UPluginMapViewComponent::GetPluginMapViewAssetName() const
 {
-	Vertices.Reset();
-	Indices.Reset();
-	CachedLocalBounds = FBoxSphereBounds( FBox( 0 ) );
-
-	// Mark our render state dirty so that CreateSceneProxy can refresh it on demand
-	MarkRenderStateDirty();
+	return PluginMapView != nullptr ? PluginMapView->GetName() : FString(TEXT("NONE"));
 }
-
-
 

@@ -9,13 +9,13 @@ namespace UnrealBuildTool.Rules
 			PrivateDependencyModuleNames.AddRange(
 				new string[] {
                     "Core",
-					"CoreUObject",
-					"Engine",
-					"UnrealEd",
-					"XmlParser",
-					"AssetTools",
-					"PluginMapViewRuntime"
-				}
+                    "CoreUObject",
+                    "Engine",
+                    "UnrealEd",
+                    "XmlParser",
+                    "AssetTools",
+                    "PluginMapViewRuntime"
+                }
 			);
 		}
 	}
