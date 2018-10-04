@@ -13,4 +13,7 @@ class PLUGINMAPVIEWRUNTIME_API APluginMapViewActor : public AActor
 	/**  Component that represents a section of street map roads and buildings */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "PluginMapView")
 		class UPluginMapViewComponent* PluginMapViewComponent;
+
+public: 
+	FORCEINLINE class UPluginMapViewComponent* GetPluginMapViewComponent() { return PluginMapViewComponent; }
 };

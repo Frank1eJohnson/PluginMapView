@@ -12,6 +12,7 @@ struct PLUGINMAPVIEWRUNTIME_API FPluginMapViewCollisionSettings
 
 public:
 
+
 	/** Uses triangle mesh data for collision data. (Cannot be used for physics simulation). */
 	UPROPERTY(EditAnywhere, Category = "PluginMapView")
 		uint32 bGenerateCollision : 1;

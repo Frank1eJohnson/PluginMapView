@@ -26,12 +26,6 @@
 			"Name" : "PluginMapViewImporting",
 			"Type" : "Editor",
 			"LoadingPhase" : "Default"
-		},
-
-		{
-			"Name" : "PluginMapViewEditor",
-			"Type" : "Editor",
-			"LoadingPhase" : "Default"
 		}
   ]
 }

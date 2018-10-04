@@ -2,21 +2,32 @@
 
 namespace UnrealBuildTool.Rules
 {
-	public class PluginMapViewImporting : ModuleRules
-	{
+    public class PluginMapViewImporting : ModuleRules
+    {
         public PluginMapViewImporting(TargetInfo Target)
-		{
-			PrivateDependencyModuleNames.AddRange(
-				new string[] {
+        {
+            PrivateDependencyModuleNames.AddRange(
+                new string[] {
                     "Core",
                     "CoreUObject",
                     "Engine",
                     "UnrealEd",
                     "XmlParser",
                     "AssetTools",
+                    "Projects",
+                    "Slate",
+                    "EditorStyle",
+                    "SlateCore",
+                    "PropertyEditor",
+                    "RenderCore",
+                    "ShaderCore",
+                    "RHI",
+                    "RawMesh",
+                    "AssetTools",
+                    "AssetRegistry",
                     "PluginMapViewRuntime"
                 }
-			);
-		}
-	}
+            );
+        }
+    }
 }
