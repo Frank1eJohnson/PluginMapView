@@ -18,8 +18,8 @@
 
 UPluginMapViewComponent::UPluginMapViewComponent(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer),
-	CachedLocalBounds(FBox(0)),
-	PluginMapView(nullptr)
+	  PluginMapView(nullptr),
+	  CachedLocalBounds(FBox(0))
 {
 	// We make sure our mesh collision profile name is set to NoCollisionProfileName at initialization. 
 	// Because we don't have collision data yet!
