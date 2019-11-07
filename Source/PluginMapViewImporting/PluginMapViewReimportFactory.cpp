@@ -43,9 +43,6 @@ EReimportResult::Type UPluginMapViewReimportFactory::Reimport( UObject* Obj )
 		return EReimportResult::Failed;
 	}
 
-	// Suppress the import overwrite dialog, we want to keep existing settings when re-importing
-	USoundFactory::SuppressImportOverwriteDialog();
-
 	if( UFactory::StaticImportObject( PluginMapView->GetClass(), PluginMapView->GetOuter(), *PluginMapView->GetName(), RF_Public|RF_Standalone, *Filename, nullptr, this ) )
 	{
 		// Mark the package dirty after the successful import

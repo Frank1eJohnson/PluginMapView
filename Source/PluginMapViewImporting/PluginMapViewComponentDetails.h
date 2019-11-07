@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include "IDetailCustomization.h"
+
 class  FPluginMapViewComponentDetails : public IDetailCustomization
 {
 public:
