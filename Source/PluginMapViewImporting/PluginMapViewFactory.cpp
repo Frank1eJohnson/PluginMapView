@@ -287,6 +287,7 @@ bool UPluginMapViewFactory::LoadFromOpenPluginMapViewXMLFile( UPluginMapView* Pl
 				}
 
 				NewBuilding.Height = OSMWay.Height * OSMToCentimetersScaleFactor;
+				NewBuilding.BuildingLevels = OSMWay.BuildingLevels;
 
 				NewBuilding.BoundsMin = BoundsMin;
 				NewBuilding.BoundsMax = BoundsMax;
