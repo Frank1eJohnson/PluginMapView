@@ -19,7 +19,7 @@
 UPluginMapViewComponent::UPluginMapViewComponent(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer),
 	  PluginMapView(nullptr),
-	  CachedLocalBounds(FBox(0))
+	  CachedLocalBounds(ForceInit)
 {
 	// We make sure our mesh collision profile name is set to NoCollisionProfileName at initialization. 
 	// Because we don't have collision data yet!
@@ -184,9 +184,7 @@ void UPluginMapViewComponent::ClearCollision()
 
 	if (PluginMapViewBodySetup != nullptr)
 	{
-#if WITH_RUNTIME_PHYSICS_COOKING || WITH_EDITOR
 		PluginMapViewBodySetup->InvalidatePhysicsData();
-#endif
 		PluginMapViewBodySetup = nullptr;
 	}
 
@@ -237,7 +235,7 @@ void UPluginMapViewComponent::GenerateMesh()
 	/////////////////////////////////////////////////////////
 
 
-	CachedLocalBounds = FBox( 0 );
+	CachedLocalBounds = FBox( ForceInit );
 	Vertices.Reset();
 	Indices.Reset();
 
@@ -529,7 +527,7 @@ void UPluginMapViewComponent::InvalidateMesh()
 {
 	Vertices.Reset();
 	Indices.Reset();
-	CachedLocalBounds = FBoxSphereBounds(FBox(0));
+	CachedLocalBounds = FBoxSphereBounds(FBox(ForceInit));
 	ClearCollision();
 	// Mark our render state dirty so that CreateSceneProxy can refresh it on demand
 	MarkRenderStateDirty();

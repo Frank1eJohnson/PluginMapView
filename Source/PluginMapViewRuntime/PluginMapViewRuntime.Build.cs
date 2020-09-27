@@ -4,7 +4,8 @@ namespace UnrealBuildTool.Rules
 {
 	public class PluginMapViewRuntime : ModuleRules
 	{
-        public PluginMapViewRuntime(TargetInfo Target)
+        public PluginMapViewRuntime(ReadOnlyTargetRules Target)
+			: base(Target)
 		{
 			PrivateDependencyModuleNames.AddRange(
 				new string[] {

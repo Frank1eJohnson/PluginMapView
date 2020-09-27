@@ -4,7 +4,8 @@ namespace UnrealBuildTool.Rules
 {
     public class PluginMapViewImporting : ModuleRules
     {
-        public PluginMapViewImporting(TargetInfo Target)
+        public PluginMapViewImporting(ReadOnlyTargetRules Target)
+			: base(Target)
         {
             PrivateDependencyModuleNames.AddRange(
                 new string[] {
