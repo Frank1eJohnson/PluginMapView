@@ -43,7 +43,7 @@ void FPluginMapViewComponentDetails::CustomizeDetails(IDetailLayoutBuilder& Deta
 {
 	LastDetailBuilderPtr = &DetailBuilder;
 
-	TArray <TWeakObjectPtr<UObject>> SelectedObjects = DetailBuilder.GetDetailsView().GetSelectedObjects();
+	TArray <TWeakObjectPtr<UObject>> SelectedObjects = DetailBuilder.GetDetailsView()->GetSelectedObjects();
 
 	for (const TWeakObjectPtr<UObject>& Object : SelectedObjects)
 	{
@@ -58,7 +58,7 @@ void FPluginMapViewComponentDetails::CustomizeDetails(IDetailLayoutBuilder& Deta
 
 	if (SelectedPluginMapViewComponent == nullptr)
 	{
-		TArray<TWeakObjectPtr<AActor>> SelectedActors = DetailBuilder.GetDetailsView().GetSelectedActors();
+		TArray<TWeakObjectPtr<AActor>> SelectedActors = DetailBuilder.GetDetailsView()->GetSelectedActors();
 
 		for (const TWeakObjectPtr<UObject>& Object : SelectedObjects)
 		{
