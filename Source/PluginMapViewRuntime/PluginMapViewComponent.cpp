@@ -170,11 +170,8 @@ void UPluginMapViewComponent::GenerateCollision()
 	}
 
 	// Rebuild the body setup
-#if WITH_EDITOR || WITH_RUNTIME_PHYSICS_COOKING
 	PluginMapViewBodySetup->InvalidatePhysicsData();
-#endif
 	PluginMapViewBodySetup->CreatePhysicsMeshes();
-
 	UpdateNavigationIfNeeded();
 }
 

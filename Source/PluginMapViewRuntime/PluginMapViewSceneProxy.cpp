@@ -1,172 +1,104 @@
-// Copyright 2017 Zhongqi Shan. All Rights Reserved.
+// Copyright 2017 Mike Fricker. All Rights Reserved.
 
-#include "PluginMapViewRuntime.h"
-#include "PluginMapViewSceneProxy.h"
-#include "PluginMapViewComponent.h"
+#include "StreetMapRuntime.h"
+#include "StreetMapSceneProxy.h"
+#include "StreetMapComponent.h"
 #include "Runtime/Engine/Public/SceneManagement.h"
 
 
-void FPluginMapViewVertexBuffer::InitRHI()
-{
-	if( Vertices.Num() > 0 )
-	{
-		// Allocate our vertex buffer
-		FRHIResourceCreateInfo CreateInfo;
-		VertexBufferRHI = RHICreateVertexBuffer( Vertices.Num() * sizeof( Vertices[0] ), BUF_Static, CreateInfo );
-		
-		// Load the vertex buffer with data
-		void* VertexBufferData = RHILockVertexBuffer( VertexBufferRHI, 0, Vertices.Num() * sizeof( Vertices[0] ), RLM_WriteOnly );
-		FMemory::Memcpy( VertexBufferData, Vertices.GetData(), Vertices.Num() * sizeof( FPluginMapViewVertex ) );
-		RHIUnlockVertexBuffer( VertexBufferRHI );
-	}
-}
-
-
-void FPluginMapViewIndexBuffer::InitRHI()
-{
-	const int IndexCount = FMath::Max( Indices16.Num(), Indices32.Num() );
-	if( IndexCount > 0 )
-	{
-		const bool b32BitIndices = Indices32.Num() > Indices16.Num();
-		const uint8 IndexSize = b32BitIndices ? sizeof( Indices32[ 0 ] ) : sizeof( Indices16[ 0 ] );
-		const void* IndexSourceData;
-		if( b32BitIndices )
-		{
-			IndexSourceData = Indices32.GetData();
-		}
-		else
-		{
-			IndexSourceData = Indices16.GetData();
-		}
-		
-		// Allocate our index buffer and load it with data
-		FRHIResourceCreateInfo CreateInfo;
-		IndexBufferRHI = RHICreateIndexBuffer( IndexSize, IndexCount * IndexSize, BUF_Static, CreateInfo );
-		void* IndexBufferData = RHILockIndexBuffer( IndexBufferRHI, 0, IndexCount * IndexSize, RLM_WriteOnly );
-		FMemory::Memcpy( IndexBufferData, IndexSourceData, IndexCount * IndexSize );
-		RHIUnlockIndexBuffer( IndexBufferRHI );
-	}
-}
-
-
-void FPluginMapViewVertexFactory::InitVertexFactory( const FPluginMapViewVertexBuffer& VertexBuffer )
-{
-	// Setup the vertex factory streams
-	FDataType DataType;
-	DataType.PositionComponent = STRUCTMEMBER_VERTEXSTREAMCOMPONENT( &VertexBuffer, FPluginMapViewVertex, Position, VET_Float3 );
-	DataType.TextureCoordinates.Add( STRUCTMEMBER_VERTEXSTREAMCOMPONENT( &VertexBuffer, FPluginMapViewVertex, TextureCoordinate, VET_Float2 ) );
-	DataType.TangentBasisComponents[0] = STRUCTMEMBER_VERTEXSTREAMCOMPONENT( &VertexBuffer, FPluginMapViewVertex, TangentX, VET_PackedNormal);
-	DataType.TangentBasisComponents[1] = STRUCTMEMBER_VERTEXSTREAMCOMPONENT( &VertexBuffer, FPluginMapViewVertex, TangentZ, VET_PackedNormal);
-	DataType.ColorComponent = STRUCTMEMBER_VERTEXSTREAMCOMPONENT( &VertexBuffer, FPluginMapViewVertex, Color, VET_Color );
-	
-	// Send it off to the rendering thread
-	check( !IsInActualRenderingThread() );
-	ENQUEUE_UNIQUE_RENDER_COMMAND_TWOPARAMETER(
-											   InitPluginMapViewVertexFactory,
-											   FPluginMapViewVertexFactory*, VertexFactory, this,
-											   FDataType, DataType, DataType,
-											   {
-												   VertexFactory->SetData( DataType );
-											   });
-}
-
-
-FPluginMapViewSceneProxy::FPluginMapViewSceneProxy(const UPluginMapViewComponent* InComponent)
+FStreetMapSceneProxy::FStreetMapSceneProxy(const UStreetMapComponent* InComponent)
 	: FPrimitiveSceneProxy(InComponent),
-	PluginMapViewComp(InComponent),
-	CollisionResponse(InComponent->GetCollisionResponseToChannels())
+	StreetMapComp(InComponent),
+	CollisionResponse(InComponent->GetCollisionResponseToChannels()),
+	VertexFactory(GetScene().GetFeatureLevel(), "FStreetMapSceneProxy")
 {
 
 }
 
-
-void FPluginMapViewSceneProxy::Init( const UPluginMapViewComponent* InComponent, const TArray< FPluginMapViewVertex >& Vertices, const TArray< uint16 >& Indices )
+void FStreetMapSceneProxy::Init(const UStreetMapComponent* InComponent, const TArray< FStreetMapVertex >& Vertices, const TArray< uint32 >& Indices)
 {
-	// Copy 16-bit index data
-	IndexBuffer.Indices16 = Indices;
-	
-	InitAfterIndexBuffer( InComponent, Vertices );
-}
+	// Copy index buffer
+	IndexBuffer32.Indices = Indices;
 
-
-void FPluginMapViewSceneProxy::Init( const UPluginMapViewComponent* InComponent, const TArray< FPluginMapViewVertex >& Vertices, const TArray< uint32 >& Indices )
-{
-	// If we fit into a 16-bit index buffer, just use that
-	if( Vertices.Num() < 0xffff )
-	{
-		const int32 IndexCount = Indices.Num();
-		IndexBuffer.Indices16.AddUninitialized( IndexCount );
-		for( int32 Index = 0; Index < IndexCount; ++Index )
-		{
-			IndexBuffer.Indices16[ Index ] = Indices[ Index ];
-		}
-	}
-	else
-	{
-		// Copy 32-bit index data
-		IndexBuffer.Indices32 = Indices;
-	}
-	
-	InitAfterIndexBuffer( InComponent, Vertices );
-}
-
-void FPluginMapViewSceneProxy::InitAfterIndexBuffer( const UPluginMapViewComponent* PluginMapViewComponent, const TArray< FPluginMapViewVertex >& Vertices )
-{
 	MaterialInterface = nullptr;
-	this->MaterialRelevance = PluginMapViewComponent->GetMaterialRelevance( GetScene().GetFeatureLevel() );
-	
+	this->MaterialRelevance = InComponent->GetMaterialRelevance(GetScene().GetFeatureLevel());
+
+
 	// Copy vertex data
-	VertexBuffer.Vertices = Vertices;
+	const int32 NumVerts = Vertices.Num();
+	TArray<FDynamicMeshVertex> DynamicVertices;
+	DynamicVertices.SetNumUninitialized(NumVerts);
+
+	for (int VertIdx = 0; VertIdx < NumVerts; VertIdx++)
+	{
+		const FStreetMapVertex& StreetMapVert = Vertices[VertIdx];
+		FDynamicMeshVertex& Vert = DynamicVertices[VertIdx];
+		Vert.Position = StreetMapVert.Position;
+		Vert.Color = StreetMapVert.Color;
+		Vert.TextureCoordinate[0] = StreetMapVert.TextureCoordinate;
+		Vert.TangentX = StreetMapVert.TangentX;
+		Vert.TangentZ = StreetMapVert.TangentZ;
+	}
+
+	VertexBuffer.InitFromDynamicVertex(&VertexFactory, DynamicVertices);
+
+	// Enqueue initialization of render resource
 	InitResources();
-	
+
 	// Set a material
 	{
-		if( PluginMapViewComponent->GetNumMaterials() > 0 )
+		if (InComponent->GetNumMaterials() > 0)
 		{
-			MaterialInterface = PluginMapViewComponent->GetMaterial( 0 );
+			MaterialInterface = InComponent->GetMaterial(0);
 		}
-		
+
 		// Use the default material if we don't have one set
-		if( MaterialInterface == nullptr )
+		if (MaterialInterface == nullptr)
 		{
-			MaterialInterface = UMaterial::GetDefaultMaterial( MD_Surface );
+			MaterialInterface = UMaterial::GetDefaultMaterial(MD_Surface);
 		}
 	}
 }
 
-
-
-FPluginMapViewSceneProxy::~FPluginMapViewSceneProxy()
+FStreetMapSceneProxy::~FStreetMapSceneProxy()
 {
-	VertexBuffer.ReleaseResource();
-	IndexBuffer.ReleaseResource();
+	VertexBuffer.PositionVertexBuffer.ReleaseResource();
+	VertexBuffer.StaticMeshVertexBuffer.ReleaseResource();
+	VertexBuffer.ColorVertexBuffer.ReleaseResource();
+	IndexBuffer32.ReleaseResource();
 	VertexFactory.ReleaseResource();
 }
 
 
-void FPluginMapViewSceneProxy::InitResources()
+SIZE_T FStreetMapSceneProxy::GetTypeHash() const
+{
+	static size_t UniquePointer;
+	return reinterpret_cast<size_t>(&UniquePointer);
+}
+
+void FStreetMapSceneProxy::InitResources()
 {
 	// Start initializing our vertex buffer, index buffer, and vertex factory.  This will be kicked off on the render thread.
-	BeginInitResource( &VertexBuffer );
-	BeginInitResource( &IndexBuffer );
-	
-	VertexFactory.InitVertexFactory( VertexBuffer );
-	BeginInitResource( &VertexFactory );
+	BeginInitResource(&VertexBuffer.PositionVertexBuffer);
+	BeginInitResource(&VertexBuffer.StaticMeshVertexBuffer);
+	BeginInitResource(&VertexBuffer.ColorVertexBuffer);
+	BeginInitResource(&IndexBuffer32);
+	BeginInitResource(&VertexFactory);
 }
 
 
-bool FPluginMapViewSceneProxy::MustDrawMeshDynamically( const FSceneView& View ) const
+bool FStreetMapSceneProxy::MustDrawMeshDynamically( const FSceneView& View ) const
 {
 	return ( AllowDebugViewmodes() && View.Family->EngineShowFlags.Wireframe ) || IsSelected();
 }
 
 
-bool FPluginMapViewSceneProxy::IsInCollisionView(const FEngineShowFlags& EngineShowFlags) const
+bool FStreetMapSceneProxy::IsInCollisionView(const FEngineShowFlags& EngineShowFlags) const
 {
 	return  EngineShowFlags.CollisionVisibility || EngineShowFlags.CollisionPawn;
 }
 
-FPrimitiveViewRelevance FPluginMapViewSceneProxy::GetViewRelevance( const FSceneView* View ) const
+FPrimitiveViewRelevance FStreetMapSceneProxy::GetViewRelevance( const FSceneView* View ) const
 {
 	FPrimitiveViewRelevance Result;
 	Result.bDrawRelevance = IsShown(View);
@@ -183,13 +115,13 @@ FPrimitiveViewRelevance FPluginMapViewSceneProxy::GetViewRelevance( const FScene
 }
 
 
-bool FPluginMapViewSceneProxy::CanBeOccluded() const
+bool FStreetMapSceneProxy::CanBeOccluded() const
 {
 	return !MaterialRelevance.bDisableDepthTest;
 }
 
 
-void FPluginMapViewSceneProxy::MakeMeshBatch( FMeshBatch& Mesh, FMaterialRenderProxy* WireframeMaterialRenderProxyOrNull, bool bDrawCollision) const
+void FStreetMapSceneProxy::MakeMeshBatch( FMeshBatch& Mesh, FMaterialRenderProxy* WireframeMaterialRenderProxyOrNull, bool bDrawCollision) const
 {
 	FMaterialRenderProxy* MaterialProxy = NULL;
 	if( WireframeMaterialRenderProxyOrNull != nullptr )
@@ -204,32 +136,32 @@ void FPluginMapViewSceneProxy::MakeMeshBatch( FMeshBatch& Mesh, FMaterialRenderP
 		}
 		else if (MaterialProxy == nullptr)
 		{
-			MaterialProxy = PluginMapViewComp->GetDefaultMaterial()->GetRenderProxy(IsSelected());
+			MaterialProxy = StreetMapComp->GetDefaultMaterial()->GetRenderProxy(IsSelected());
 		}
 	}
 	
 	FMeshBatchElement& BatchElement = Mesh.Elements[0];
-	BatchElement.IndexBuffer = &IndexBuffer;
+	BatchElement.IndexBuffer = &IndexBuffer32;
 	Mesh.bWireframe = WireframeMaterialRenderProxyOrNull != nullptr;
 	Mesh.VertexFactory = &VertexFactory;
 	Mesh.MaterialRenderProxy = MaterialProxy;
 	Mesh.CastShadow = true;
 	BatchElement.PrimitiveUniformBuffer = CreatePrimitiveUniformBufferImmediate(GetLocalToWorld(), GetBounds(), GetLocalBounds(), true, UseEditorDepthTest());
 	BatchElement.FirstIndex = 0;
-	const int IndexCount = FMath::Max( IndexBuffer.Indices16.Num(), IndexBuffer.Indices32.Num() );
+	const int IndexCount = IndexBuffer32.Indices.Num();
 	BatchElement.NumPrimitives = IndexCount / 3;
 	BatchElement.MinVertexIndex = 0;
-	BatchElement.MaxVertexIndex = VertexBuffer.Vertices.Num() - 1;
+	BatchElement.MaxVertexIndex = VertexBuffer.PositionVertexBuffer.GetNumVertices() - 1;
 	Mesh.ReverseCulling = IsLocalToWorldDeterminantNegative();
 	Mesh.Type = PT_TriangleList;
 	Mesh.DepthPriorityGroup = SDPG_World;
 }
 
 
-void FPluginMapViewSceneProxy::DrawStaticElements( FStaticPrimitiveDrawInterface* PDI )
+void FStreetMapSceneProxy::DrawStaticElements( FStaticPrimitiveDrawInterface* PDI )
 {
-	const int IndexCount = FMath::Max( IndexBuffer.Indices16.Num(), IndexBuffer.Indices32.Num() );
-	if( VertexBuffer.Vertices.Num() > 0 && IndexCount > 0 )
+	const int IndexCount = IndexBuffer32.Indices.Num();
+	if( VertexBuffer.PositionVertexBuffer.GetNumVertices() > 0 && IndexCount > 0 )
 	{
 		const float ScreenSize = 1.0f;
 
@@ -240,10 +172,10 @@ void FPluginMapViewSceneProxy::DrawStaticElements( FStaticPrimitiveDrawInterface
 }
 
 
-void FPluginMapViewSceneProxy::GetDynamicMeshElements(const TArray<const FSceneView*>& Views, const FSceneViewFamily& ViewFamily, uint32 VisibilityMap, class FMeshElementCollector& Collector) const
+void FStreetMapSceneProxy::GetDynamicMeshElements(const TArray<const FSceneView*>& Views, const FSceneViewFamily& ViewFamily, uint32 VisibilityMap, class FMeshElementCollector& Collector) const
 {
-	const int IndexCount = FMath::Max(IndexBuffer.Indices16.Num(), IndexBuffer.Indices32.Num());
-	if (VertexBuffer.Vertices.Num() > 0 && IndexCount > 0)
+	const int IndexCount = IndexBuffer32.Indices.Num();
+	if (VertexBuffer.PositionVertexBuffer.GetNumVertices() > 0 && IndexCount > 0)
 	{
 		for (int32 ViewIndex = 0; ViewIndex < Views.Num(); ++ViewIndex)
 		{
@@ -274,7 +206,7 @@ void FPluginMapViewSceneProxy::GetDynamicMeshElements(const TArray<const FSceneV
 }
 
 
-uint32 FPluginMapViewSceneProxy::GetMemoryFootprint( void ) const
+uint32 FStreetMapSceneProxy::GetMemoryFootprint( void ) const
 { 
 	return sizeof( *this ) + GetAllocatedSize();
 }
